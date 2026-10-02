@@ -90,6 +90,7 @@ def book(k, t, d, h, cloth_name):
 
 
 SAVE_ONLY = False
+HERO_ONLY = False
 
 
 def finish(name, cams, quick, res_hero, res_detail):
@@ -105,7 +106,8 @@ def finish(name, cams, quick, res_hero, res_detail):
         bpy.ops.wm.save_as_mainfile(filepath=os.path.join(BLENDS, name + ".blend"), compress=True)
     if SAVE_ONLY:
         return
-    for cam, tag, res in ((cams[0], "hero", res_hero), (cams[1], "detail", res_detail)):
+    shots = ((cams[0], "hero", res_hero), (cams[1], "detail", res_detail))
+    for cam, tag, res in shots[:1] if HERO_ONLY else shots:
         if quick:
             r = (res[0] // 4, res[1] // 4)
             S.render_to(cam, os.path.join(RENDERS, f"_quick_{name}_{tag}.png"), r, samples=24)
@@ -240,13 +242,15 @@ def main():
     ap.add_argument("--product", default="all", choices=["all", "coasters", "planters", "keepsake"])
     ap.add_argument("--quick", action="store_true", help="small, fast test renders only")
     ap.add_argument("--save-only", action="store_true", help="write the .blend files, skip rendering")
+    ap.add_argument("--hero-only", action="store_true", help="render the hero shot, skip the detail shot")
     ap.add_argument("--name", default="E. Hartwell")
     ap.add_argument("--year", default="2026")
     ap.add_argument("--batch", default="26-0417")
     ap.add_argument("--qr-base", default="https://example.com/s/")
     a = ap.parse_args(argv)
-    global SAVE_ONLY
+    global SAVE_ONLY, HERO_ONLY
     SAVE_ONLY = a.save_only
+    HERO_ONLY = a.hero_only
     bm.DETAIL = 1.0 if a.quick else 1.6
     bm.WRITE_GLB = False
     M = bm.make_materials()
