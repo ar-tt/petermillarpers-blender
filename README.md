@@ -47,7 +47,9 @@ The build uses only the Python standard library (3.8+), so no Blender or pip ins
 
 ## 3D printing (Bambu Lab A1, one color)
 
-`print/` holds print-ready STL files in millimetres. They're stone only (no plant, soil, pebbles, cork or felt), every mesh is checked watertight, and they import into Bambu Studio at the right size with no scaling.
+**Easiest:** open `print/limestone_set_A1.3mf` in Bambu Studio. It's a project with all four plates laid out below, and each piece carries the speed settings (0.28 mm layers, 2 walls, lightning infill, no supports). Pick your printer and filament, click **Slice all**, then send plate 1. When it finishes, clear the bed and send the next plate.
+
+`print/` also holds the individual STL files in millimeters. They're stone only (no plant, soil, pebbles, cork or felt), every mesh is checked watertight, and they import into Bambu Studio at the right size with no scaling.
 
 | File | Size (mm) | Scale | Rough time* |
 |---|---|---|---|

@@ -14,7 +14,7 @@ import argparse
 import os
 
 from build_models import FACE_FRONT, FLIP_DOWN, Fonts, initials, panel
-from stonekit import printprep, shapes, ttf
+from stonekit import bambu3mf, printprep, shapes, ttf
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "print")
@@ -154,6 +154,7 @@ def main():
         ("planter_small", lambda: planter(F, a, "Small", 85, 160, 22, 110, 2.0, 5.0, 21, 1.0, 0.1), 1.0),
         ("planter_large", lambda: planter(F, a, "Large", 170, 320, 40, 230, 3.0, 9.0, 42, 1.6, 0.15), None),
     ]
+    objects = {}
     total_h = total_g = 0.0
     print(f"{'piece':<16}{'size (mm)':>24}{'scale':>7}{'open':>6}{'grams':>7}{'hours':>7}")
     for name, build, scale in pieces:
@@ -168,12 +169,38 @@ def main():
         zmin = rep["min"][2]
         verts = [(x, y, z - zmin) for x, y, z in verts]
         printprep.write_stl(os.path.join(OUT, name + ".stl"), verts, tris, name)
+        objects[name] = (verts, tris)
         h, g = estimate_hours(verts, tris)
         total_h += h; total_g += g
         sx, sy, sz = rep["size_mm"]
         print(f"{name:<16}{sx:>8.1f} x{sy:>6.1f} x{sz:>6.1f}{scale:>7.0%}"
               f"{rep['open_edges'] + rep['overshared_edges']:>6}{g:>7.0f}{h:>7.1f}")
     print(f"{'total':<16}{'':>37}{total_g:>7.0f}{total_h:>7.1f}")
+    if len(objects) == len(pieces):
+        write_project(objects)
+
+
+# Four plates, longest print first. Bookends stand side by side along their
+# long side with the block turned 90 degrees next to them.
+PLATES = [
+    ("1 Large planter", [("planter_large", 128.0, 128.0, False)]),
+    ("2 Small planter", [("planter_small", 128.0, 128.0, False)]),
+    ("3 Bookends + block", [("bookend_left", 60.0, 66.0, False),
+                            ("bookend_right", 60.0, 192.0, False),
+                            ("engraved_block", 168.0, 128.0, True)]),
+    ("4 Coasters", [("coaster_1", 72.0, 72.0, False), ("coaster_2", 184.0, 72.0, False),
+                    ("coaster_3", 72.0, 184.0, False), ("coaster_4", 184.0, 184.0, False)]),
+]
+# per-object overrides so the speed settings travel with the project
+SETTINGS = {"layer_height": "0.28", "wall_loops": "2", "sparse_infill_pattern": "lightning",
+            "sparse_infill_density": "15%", "enable_support": "0"}
+
+
+def write_project(objects):
+    path = os.path.join(OUT, "limestone_set_A1.3mf")
+    bambu3mf.write_project(path, objects, PLATES, settings=SETTINGS)
+    print(f"wrote {os.path.relpath(path, HERE)} ({os.path.getsize(path) / 1e6:.1f} MB, "
+          f"{len(PLATES)} plates)")
 
 
 if __name__ == "__main__":
