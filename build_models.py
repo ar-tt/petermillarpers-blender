@@ -172,6 +172,7 @@ def build_coasters(M, F, a):
 def planter(M, F, a, label, R, H, wall, depth, soil_drop, step, amp, seed, plant, pups,
             k, cell, n_pebbles):
     PW, PH = 110 * k, 50 * k
+    PW, PH = round(PW / cell) * cell, round(PH / cell) * cell   # panel must match the opening
     stone = shapes.round_planter(R, H, wall, depth, amp, seed, step, (-90.0, R - 6 * k),
                                  "Limestone_Split", "Limestone_Sawn",
                                  (-PW / 2, -PH / 2, PW / 2, PH / 2), name=f"Planter_{label}_Stone")
@@ -225,7 +226,7 @@ def bottom_label(F, a, suffix, w, cx, cy, k=1.0):
 
 
 def build_block(M, F, a):
-    print("Keepsake: engraved block + personalised bookends, QR codes underneath")
+    print("Keepsake: engraved block + personalized bookends, QR codes underneath")
     T = ttf.text_polys
     # hand-sized block: split sides, honed engraved top, sawn base with QR
     SIZE = (102.0, 64.0, 38.0)

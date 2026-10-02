@@ -152,20 +152,24 @@ def split_block(size, kinds, step, amp, seed, mat_split, mat_sawn, cavity=None,
             x[k] += s * fn(p) * w
         return tuple(x)
 
+    # grid lines added for openings are shared by every face along that axis,
+    # so neighbouring faces meet vertex-for-vertex along their common edge
+    extra = {0: set(), 1: set(), 2: set()}
+    if cavity:
+        extra[0].update((-cavity[0] / 2, cavity[0] / 2))
+        extra[1].update((-cavity[1] / 2, cavity[1] / 2))
+    for key, hole in holes.items():
+        k = FACES[key][0]
+        extra[(k + 1) % 3].update((hole[0], hole[2]))
+        extra[(k + 2) % 3].update((hole[1], hole[3]))
     mesh = Mesh(name)
     mesh.face_uv = {}
     for key, (k, s) in FACES.items():
         i, j = (k + 1) % 3, (k + 2) % 3
-        ex_i = ex_j = ()
         cav = cavity if (cavity and key == "+z") else None
-        if cav:
-            ex = {0: (-cav[0] / 2, cav[0] / 2), 1: (-cav[1] / 2, cav[1] / 2)}
-            ex_i, ex_j = ex[i], ex[j]
         hole = holes.get(key)
-        if hole:
-            ex_i, ex_j = (hole[0], hole[2]), (hole[1], hole[3])
-        us = _axis_coords(lo[i], hi[i], step, ex_i)
-        vs = _axis_coords(lo[j], hi[j], step, ex_j)
+        us = _axis_coords(lo[i], hi[i], step, tuple(sorted(extra[i])))
+        vs = _axis_coords(lo[j], hi[j], step, tuple(sorted(extra[j])))
         face = Prim()
         off = (rnd.random(), rnd.random())
         mesh.face_uv[key] = off
@@ -209,8 +213,8 @@ def split_block(size, kinds, step, amp, seed, mat_split, mat_sawn, cavity=None,
     if cavity:
         cx, cy, depth = cavity
         top, bot = sz, sz - depth
-        xs_all = _axis_coords(lo[0], hi[0], step, (-cx / 2, cx / 2))
-        ys_all = _axis_coords(lo[1], hi[1], step, (-cy / 2, cy / 2))
+        xs_all = _axis_coords(lo[0], hi[0], step, tuple(sorted(extra[0])))
+        ys_all = _axis_coords(lo[1], hi[1], step, tuple(sorted(extra[1])))
         xs = [x for x in xs_all if -cx / 2 - 1e-6 <= x <= cx / 2 + 1e-6]
         ys = [y for y in ys_all if -cy / 2 - 1e-6 <= y <= cy / 2 + 1e-6]
         walls = [
@@ -607,8 +611,12 @@ def _rock_field(per, amp, R, H, z_pull=True):
     return fn
 
 
-def round_coaster(R, thick, z0, amp, seed, mat_top, mat_edge, uv_off=(0.0, 0.0)):
-    """Honed round coaster with a hand-chipped, slightly rough rim."""
+def round_coaster(R, thick, z0, amp, seed, mat_top, mat_edge, uv_off=(0.0, 0.0),
+                  bottom_rect=None):
+    """Honed round coaster with a hand-chipped, slightly rough rim.
+
+    bottom_rect leaves that rectangle open in the underside for a stamp panel.
+    """
     per = Perlin(seed)
 
     def disp(t, r, z):
@@ -625,7 +633,13 @@ def round_coaster(R, thick, z0, amp, seed, mat_top, mat_edge, uv_off=(0.0, 0.0))
         (mat_top, "top", [(R - 1.3, zt, 0.5), (R - 2.6, zt, 0.2), (R - 5.0, zt, 0.0),
                           (R * 0.7, zt, 0.0), (R * 0.4, zt, 0.0), (0.0, zt, 0.0)]),
     ]
-    return revolve(segs, 400, disp, uv_scale=1 / 180.0, uv_off=uv_off, name="coaster")
+    if bottom_rect is None:
+        return revolve(segs, 400, disp, uv_scale=1 / 180.0, uv_off=uv_off, name="coaster")
+    mesh = revolve(segs[1:], 400, disp, uv_scale=1 / 180.0, uv_off=uv_off, name="coaster")
+    annulus_to_rect(mesh.prim(mat_top), mesh.ring(R - 1.2, z0, 0.0), bottom_rect, z0,
+                    (0.0, 0.0, -1.0),
+                    lambda p: (p[0] / 180.0 + uv_off[0], p[1] / 180.0 + uv_off[1]))
+    return mesh
 
 
 def disc(R, h, material, n=48, chamfer=0.0, uv_scale=1 / 130.0, top=True, bottom=True):
