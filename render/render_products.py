@@ -89,13 +89,22 @@ def book(k, t, d, h, cloth_name):
     return b
 
 
+SAVE_ONLY = False
+
+
 def finish(name, cams, quick, res_hero, res_detail):
     os.makedirs(RENDERS, exist_ok=True)
     os.makedirs(BLENDS, exist_ok=True)
     bpy.context.scene.camera = cams[0]
+    s = bpy.context.scene
+    for cam, res in ((cams[0], res_hero), (cams[1], res_detail)):
+        cam["resolution"] = res            # remembered per camera for anyone re-rendering
+    s.render.resolution_x, s.render.resolution_y = res_hero
     if not quick:
         bpy.ops.file.pack_all()
         bpy.ops.wm.save_as_mainfile(filepath=os.path.join(BLENDS, name + ".blend"), compress=True)
+    if SAVE_ONLY:
+        return
     for cam, tag, res in ((cams[0], "hero", res_hero), (cams[1], "detail", res_detail)):
         if quick:
             r = (res[0] // 4, res[1] // 4)
@@ -230,11 +239,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--product", default="all", choices=["all", "coasters", "planters", "keepsake"])
     ap.add_argument("--quick", action="store_true", help="small, fast test renders only")
+    ap.add_argument("--save-only", action="store_true", help="write the .blend files, skip rendering")
     ap.add_argument("--name", default="E. Hartwell")
     ap.add_argument("--year", default="2026")
     ap.add_argument("--batch", default="26-0417")
     ap.add_argument("--qr-base", default="https://example.com/s/")
     a = ap.parse_args(argv)
+    global SAVE_ONLY
+    SAVE_ONLY = a.save_only
     bm.DETAIL = 1.0 if a.quick else 1.6
     bm.WRITE_GLB = False
     M = bm.make_materials()
