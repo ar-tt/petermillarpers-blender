@@ -3,3 +3,6 @@ __pycache__/
 
 # quick test renders
 renders/_quick_*
+
+# Blender backup files
+*.blend1
