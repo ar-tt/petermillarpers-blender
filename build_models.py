@@ -23,6 +23,10 @@ FONTS = os.path.join(HERE, "fonts")
 OUT = os.path.join(HERE, "models")
 PREV = os.path.join(HERE, "previews")
 
+# The render pipeline raises DETAIL for finer stone and turns off GLB writing.
+DETAIL = 1.0
+WRITE_GLB = True
+
 FLIP_DOWN = ((1.0, 0.0, 0.0), (0.0, -1.0, 0.0), (0.0, 0.0, -1.0))   # panel faces -z
 FACE_FRONT = ((1.0, 0.0, 0.0), (0.0, 0.0, -1.0), (0.0, 1.0, 0.0))   # panel faces -y
 
@@ -59,6 +63,8 @@ def used(nodes, materials):
 
 def export(stem, nodes, materials):
     mats = used(nodes, materials)
+    if not WRITE_GLB:
+        return mats
     path = os.path.join(OUT, stem + ".glb")
     size = write_glb(path, nodes, mats)
     tris = 0
@@ -197,9 +203,9 @@ def planter(M, F, a, label, R, H, wall, depth, soil_drop, step, amp, seed, plant
 
 def build_planters(M, F, a):
     print("Planters: round rough-split limestone, sawn facet, stamp + QR underneath")
-    s_stone, small = planter(M, F, a, "Small", 85, 160, 22, 110, 18, 2.0, 5.0, 21,
+    s_stone, small = planter(M, F, a, "Small", 85, 160, 22, 110, 18, 2.0 / DETAIL, 5.0, 21,
                              (10, (250, 390), (30, 46), 34), 2, 1.0, 0.1, 45)
-    l_stone, large = planter(M, F, a, "Large", 170, 320, 40, 230, 28, 3.0, 9.0, 42,
+    l_stone, large = planter(M, F, a, "Large", 170, 320, 40, 230, 28, 3.0 / DETAIL, 9.0, 42,
                              (18, (520, 820), (46, 70), 80), 4, 1.8, 0.15, 110)
     nodes = [Node("Planter_Small", None, t=(-250, -40, 0), rot=((0, 0, 1), 20), children=small),
              Node("Planter_Large", None, t=(140, 60, 0), rot=((0, 0, 1), -12), children=large)]
@@ -232,7 +238,7 @@ def build_block(M, F, a):
     SIZE = (102.0, 64.0, 38.0)
     HOLE = (-42.0, -23.0, 42.0, 23.0)
     kinds = {"+x": "rough", "-x": "rough", "+y": "rough", "-y": "rough", "+z": "sawn", "-z": "sawn"}
-    block = shapes.split_block(SIZE, kinds, 1.2, 2.2, 5, "Limestone_Split", "Limestone_Sawn",
+    block = shapes.split_block(SIZE, kinds, 1.2 / DETAIL, 2.2, 5, "Limestone_Split", "Limestone_Sawn",
                                name="Engraved_Block", holes={"+z": HOLE, "-z": HOLE},
                                face_mats={"+z": "Limestone_Honed"}, uv_scale=1 / 180.0)
     assert HOLE[2] <= SIZE[0] / 2 - block.edge_band and HOLE[3] <= SIZE[1] / 2 - block.edge_band
@@ -274,7 +280,7 @@ def build_block(M, F, a):
     bookends = []
     for side, seed, inner, outer, x in (("Left", 7, "+x", "-x", -175.0), ("Right", 8, "-x", "+x", 175.0)):
         kinds = {inner: "sawn", "-y": "sawn", "-z": "sawn", outer: "rough", "+y": "rough", "+z": "rough"}
-        be = shapes.split_block(BE, kinds, 2.0, AMP, seed, "Limestone_Split", "Limestone_Sawn",
+        be = shapes.split_block(BE, kinds, 2.0 / DETAIL, AMP, seed, "Limestone_Split", "Limestone_Sawn",
                                 name=f"Bookend_{side}", holes={"-y": FRONT, "-z": BOTTOM})
         band = be.edge_band
         assert BE[0] / 2 - FRONT[3] >= band and BE[2] - FRONT[2] >= band

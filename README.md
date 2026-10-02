@@ -45,6 +45,28 @@ The bookend monogram is the first letter of the last word of the name. Use `--on
 
 The build uses only the Python standard library (3.8+), so no Blender or pip installs are needed. `tools/check_glb.py models/*.glb` reads the files back and checks them.
 
+## Product photos and Blender scenes
+
+`renders/` holds finished product photos (PNG plus a smaller JPEG of each), rendered in Blender Cycles:
+
+| Product | Hero shot | Detail shot |
+|---|---|---|
+| Coasters | `coasters_hero` - stack on a walnut tray with a rocks glass of whiskey and an ice sphere, one coaster flipped to show the stamp | `coasters_detail` - the cork underside with the inked stamp and QR code |
+| Planters | `planters_hero` (portrait) - both planters with snake plants, the small one on a plaster pedestal | `planters_detail` - split-stone texture, sawn rim, soil and pebbles |
+| Keepsake | `keepsake_hero` - bookends holding a row of clothbound books, engraved block in front, walnut desk | `keepsake_detail` - the gold-filled engraving on the block |
+
+`blender/` holds the scenes as `.blend` files (Blender 4.2 or newer) with everything set up: materials, props, softbox lighting, and two cameras (`Camera_Hero`, `Camera_Detail`). Open one and press F12 to render, or pick the other camera under Scene properties > Camera. Everything is packed into the file.
+
+The look comes from procedural materials built in `render/studio.py`: buff limestone with fossil flecks and calcite sparkle, separate honed, sawn and split finishes, gold-leaf lettering, ink, granular cork, oiled walnut, clothbound books, soil, river pebbles, glass, whiskey and ice. They generate detail at any zoom, so close-ups stay sharp.
+
+To re-render with your own name, year, batch or link (needs Blender 4.2+ on your computer, or the `bpy` Python module):
+
+```
+blender -b -P render/render_products.py -- --product all --name "Jordan Lee" --year 2027
+```
+
+`--product coasters|planters|keepsake` renders one scene; `--quick` makes small test images in about a minute.
+
 ## 3D printing (Bambu Lab A1, one color)
 
 **Easiest:** open `print/limestone_set_A1.3mf` in Bambu Studio. It's a project with all four plates laid out below, and each piece carries the speed settings (0.28 mm layers, 2 walls, lightning infill, no supports). Pick your printer and filament, click **Slice all**, then send plate 1. When it finishes, clear the bed and send the next plate.
@@ -91,5 +113,6 @@ Rebuild the STLs with your own details using `python3 build_print.py --name ... 
 - `stonekit/ttf.py`: reads the TrueType outlines used for lettering.
 - `stonekit/textures.py`: procedural limestone, cork, soil and leaf textures.
 - `stonekit/glb.py`: glTF 2.0 binary writer.
+- `render/studio.py`, `render/render_products.py`: Blender materials, props, lights, cameras and the three photo scenes.
 - `stonekit/printprep.py`: welds meshes, closes hairline cracks, checks they're watertight and writes STL.
 - `fonts/`: Liberation Serif and Sans (SIL Open Font License, see `fonts/LICENSE-Liberation.txt`).

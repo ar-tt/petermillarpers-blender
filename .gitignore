@@ -1,2 +1,5 @@
 __pycache__/
 *.pyc
+
+# quick test renders
+renders/_quick_*
