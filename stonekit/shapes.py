@@ -756,3 +756,20 @@ def pebbles(count, R, seed, material, size=(4.0, 9.0), avoid=()):
         prim.extend(sp)
         placed += 1
     return mesh
+
+
+def box_void(lo, hi, material):
+    """Closed box with inward-facing normals: a sealed empty pocket inside a
+    solid, so slicers print walls around it instead of filling it."""
+    mesh = Mesh("void")
+    prim = mesh.prim(material)
+    (x0, y0, z0), (x1, y1, z1) = lo, hi
+    uv = lambda p: (0.0, 0.0)
+    for n, quad in (((1, 0, 0), [(x0, y0, z0), (x0, y1, z0), (x0, y1, z1), (x0, y0, z1)]),
+                    ((-1, 0, 0), [(x1, y0, z0), (x1, y1, z0), (x1, y1, z1), (x1, y0, z1)]),
+                    ((0, 1, 0), [(x0, y0, z0), (x1, y0, z0), (x1, y0, z1), (x0, y0, z1)]),
+                    ((0, -1, 0), [(x0, y1, z0), (x1, y1, z0), (x1, y1, z1), (x0, y1, z1)]),
+                    ((0, 0, 1), [(x0, y0, z0), (x1, y0, z0), (x1, y1, z0), (x0, y1, z0)]),
+                    ((0, 0, -1), [(x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1)])):
+        flat_poly(prim, quad, tuple(float(c) for c in n), uv)
+    return mesh

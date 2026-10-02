@@ -51,19 +51,26 @@ The build uses only the Python standard library (3.8+), so no Blender or pip ins
 
 `print/` also holds the individual STL files in millimeters. They're stone only (no plant, soil, pebbles, cork or felt), every mesh is checked watertight, and they import into Bambu Studio at the right size with no scaling.
 
-| File | Size (mm) | Scale | Rough time* |
-|---|---|---|---|
-| `coaster_1` to `coaster_4` | 101.6 x 101.6 x 9.5 | true size | 0.5 h each |
-| `engraved_block` | 106 x 67 x 38 | true size | 1 h |
-| `bookend_left`, `bookend_right` | 96 x 121 x 166 | true size | 4 h each |
-| `planter_small` | 179 x 168 x 160 | true size | 6.5 h |
-| `planter_large` | 250 x 238 x 225 | 70% (the full 34 cm won't fit the A1) | 15 h |
+| File | Size (mm) | Scale | Default settings* | Fast settings* |
+|---|---|---|---|---|
+| `coaster_1` to `coaster_4` | 101.6 x 101.6 x 9.5 | true size | 0.8 h each | 0.5 h each |
+| `engraved_block` | 106 x 67 x 38 | true size, hollow core | 1.6 h | 0.8 h |
+| `bookend_left`, `bookend_right` | 94 x 120 x 165 | true size, hollow core | 6.4 h each | 3 h each |
+| `planter_small` | 177 x 168 x 160 | true size, 11 mm walls | 10 h | 5 h |
+| `planter_large` | 212 x 202 x 192 | 60% (the full 34 cm won't fit the A1), thin walls | 14 h | 7 h |
 
-*About 32 h in total with the settings below. These are my estimates; trust Bambu Studio's number after slicing.
+*My estimates, about 42 h in total at Bambu's defaults and about 22 h with the fast settings. My numbers have come in low against a real slice, so **use the fast settings** to stay comfortably under 48 h, and trust Bambu Studio's estimate.
 
-**Filament:** beige PLA (closest to Indiana limestone; grey is the fallback).
+The block and bookends have a sealed hollow core (at least 3 mm of solid wall everywhere, including under the engraving), and the planter walls are thinner than the display models. From the outside they look the same.
 
-**Settings:** 0.28 mm layer height, 2 walls, **lightning infill**, no supports. Lightning only builds infill under top surfaces, which roughly halves the time on these solid shapes. The pieces print fine but come out light, so the bookends won't hold heavy books on their own. If you have spare time, print the bookends at 15% gyroid infill instead (about 10 h each).
+**Filament:** white PLA. It reads as pale stone, and black paint in the QR codes gives the strongest contrast for scanning. For a warmer limestone look, brush on a thin tan wash and wipe most of it off.
+
+**Fast settings (set these in Bambu Studio before slicing):**
+1. Process preset: **0.28mm Extra Draft @BBL A1**
+2. Strength tab: Sparse infill pattern **Lightning** (keep 2 walls)
+3. Support: off
+
+The project file also carries these settings on each piece, but Bambu Studio doesn't always load them, so set them once in the process panel to be sure. Lightning infill only fills under top surfaces, so the pieces come out light, and the bookends won't hold heavy books on their own.
 
 **Orientation:** as exported, base down. The QR codes and stamps print against the plate, and the coaster tops and block engraving face up.
 

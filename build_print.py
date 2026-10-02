@@ -87,6 +87,7 @@ def block(F, a):
                polys=label(F, a, "BK", 38, -20.0, 0.0),
                qrs=[(a.qr_base + a.batch + "-BK", 32.0, (21.0, 0.0))])
     b.merge(pb.transformed(FLIP_DOWN))
+    b.merge(shapes.box_void((-43.0, -24.0, 5.0), (43.0, 24.0, 33.0), "stone"))
     return b
 
 
@@ -96,7 +97,7 @@ def bookend(F, a, side, seed, inner, outer):
     FRONT = (12.0, -25.0, 138.0, 25.0)
     BOTTOM = (-25.0, -36.0, 25.0, 36.0)
     kinds = {inner: "sawn", "-y": "sawn", "-z": "sawn", outer: "rough", "+y": "rough", "+z": "rough"}
-    be = shapes.split_block(BE, kinds, 2.0, 6.0, seed, "stone", "stone",
+    be = shapes.split_block(BE, kinds, 2.0, 4.5, seed, "stone", "stone",
                             holes={"-y": FRONT, "-z": BOTTOM})
     fw, fh = FRONT[3] - FRONT[1], FRONT[2] - FRONT[0]
     face = ttf.frame_polys(fw - 2, fh - 2, 0.9)
@@ -117,6 +118,11 @@ def bookend(F, a, side, seed, inner, outer):
                polys=label(F, a, tag, 44, 0.0, -19.0),
                qrs=[(a.qr_base + a.batch + "-" + tag, 32.0, (0.0, 17.0))])
     be.merge(pb.transformed(FLIP_DOWN))
+    # hollow core: 11 mm under split faces (they dip in up to ~6 mm), 4 mm under sawn ones
+    hx = BE[0] / 2
+    xin, xout = (hx - 4.0, -(hx - 11.0)) if inner == "+x" else (-(hx - 4.0), hx - 11.0)
+    be.merge(shapes.box_void((min(xin, xout), -BE[1] / 2 + 4.0, 4.0),
+                             (max(xin, xout), BE[1] / 2 - 11.0, BE[2] - 11.0), "stone"))
     return be
 
 
@@ -151,8 +157,8 @@ def main():
         ("engraved_block", lambda: block(F, a), 1.0),
         ("bookend_left", lambda: bookend(F, a, "Left", 7, "+x", "-x"), 1.0),
         ("bookend_right", lambda: bookend(F, a, "Right", 8, "-x", "+x"), 1.0),
-        ("planter_small", lambda: planter(F, a, "Small", 85, 160, 22, 110, 2.0, 5.0, 21, 1.0, 0.1), 1.0),
-        ("planter_large", lambda: planter(F, a, "Large", 170, 320, 40, 230, 3.0, 9.0, 42, 1.6, 0.15), None),
+        ("planter_small", lambda: planter(F, a, "Small", 85, 160, 11, 150, 2.0, 4.0, 21, 1.0, 0.1), 1.0),
+        ("planter_large", lambda: planter(F, a, "Large", 170, 320, 18, 305, 3.0, 7.0, 42, 1.6, 0.15), 0.60),
     ]
     objects = {}
     total_h = total_g = 0.0
