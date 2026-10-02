@@ -49,11 +49,14 @@ The build uses only the Python standard library (3.8+), so no Blender or pip ins
 
 `renders/` holds finished product photos (PNG plus a smaller JPEG of each), rendered in Blender Cycles:
 
-| Product | Hero shot | Detail shot |
-|---|---|---|
-| Coasters | `coasters_hero` - stack on a walnut tray with a rocks glass of whiskey and an ice sphere, one coaster flipped to show the stamp | `coasters_detail` - the cork underside with the inked stamp and QR code |
-| Planters | `planters_hero` (portrait) - both planters with snake plants, the small one on a plaster pedestal | `planters_detail` - split-stone texture, sawn rim, soil and pebbles |
-| Keepsake | `keepsake_hero` - bookends holding a row of clothbound books, engraved block in front, walnut desk | `keepsake_detail` - the gold-filled engraving on the block |
+| Photo | What's in it |
+|---|---|
+| `coasters_hero` | Stack on a walnut tray with a rocks glass of whiskey and an ice sphere, one coaster flipped to show the stamp |
+| `coasters_detail` | Close-up of the cork underside with the inked stamp and QR code |
+| `planters_hero` (portrait) | Both planters with snake plants, the small one on a plaster pedestal |
+| `keepsake_hero` | Bookends holding a row of clothbound books, engraved block in front, walnut desk |
+
+The planter and keepsake scenes also have a detail camera (split-stone close-up, and the gold engraving on the block). Those weren't rendered here to save time; switch to `Camera_Detail` in the `.blend` file to render them.
 
 `blender/` holds the scenes as `.blend` files (Blender 4.2 or newer) with everything set up: materials, props, softbox lighting, and two cameras (`Camera_Hero`, `Camera_Detail`). Open one and press F12 to render, or pick the other camera under Scene properties > Camera. Everything is packed into the file.
 
@@ -65,7 +68,7 @@ To re-render with your own name, year, batch or link (needs Blender 4.2+ on your
 blender -b -P render/render_products.py -- --product all --name "Jordan Lee" --year 2027
 ```
 
-`--product coasters|planters|keepsake` renders one scene; `--quick` makes small test images in about a minute.
+`--product coasters|planters|keepsake` renders one scene, `--hero-only` skips the detail shot, and `--quick` makes small test images in about a minute.
 
 ## 3D printing (Bambu Lab A1, one color)
 
