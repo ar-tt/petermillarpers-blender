@@ -111,7 +111,7 @@ def _axis_coords(lo, hi, step, extra=()):
 
 
 def split_block(size, kinds, step, amp, seed, mat_split, mat_sawn, cavity=None,
-                uv_scale=1 / 200.0, name="split_block"):
+                uv_scale=1 / 200.0, name="split_block", holes=None, face_mats=None):
     """Box whose faces are 'rough' (split) or 'sawn' (flat).
 
     Rough faces are displaced along their own normal. Where a rough face meets
@@ -120,13 +120,19 @@ def split_block(size, kinds, step, amp, seed, mat_split, mat_sawn, cavity=None,
     follows the broken edge.
 
     cavity=(cx, cy, depth): open-topped pocket centred in the top face.
+    holes={face: (a0, b0, a1, b1)}: rectangles left open on flat faces (in that
+    face's two in-plane axes, (k+1)%3 then (k+2)%3) for engraved panels. Keep
+    them at least `edge_band` mm (returned on the mesh) away from split faces.
+    face_mats={face: material} overrides the material per face.
     """
+    holes = holes or {}
+    face_mats = face_mats or {}
     sx, sy, sz = size
     lo = (-sx / 2, -sy / 2, 0.0)
     hi = (sx / 2, sy / 2, sz)
     per = Perlin(seed)
     rnd = random.Random(seed)
-    falloff = max(amp * 4.0, 8.0)
+    falloff = max(amp * 3.0, 8.0)
     fields = []
     for key, (k, s) in FACES.items():
         if kinds.get(key, "sawn") == "rough":
@@ -147,6 +153,7 @@ def split_block(size, kinds, step, amp, seed, mat_split, mat_sawn, cavity=None,
         return tuple(x)
 
     mesh = Mesh(name)
+    mesh.face_uv = {}
     for key, (k, s) in FACES.items():
         i, j = (k + 1) % 3, (k + 2) % 3
         ex_i = ex_j = ()
@@ -154,10 +161,14 @@ def split_block(size, kinds, step, amp, seed, mat_split, mat_sawn, cavity=None,
         if cav:
             ex = {0: (-cav[0] / 2, cav[0] / 2), 1: (-cav[1] / 2, cav[1] / 2)}
             ex_i, ex_j = ex[i], ex[j]
+        hole = holes.get(key)
+        if hole:
+            ex_i, ex_j = (hole[0], hole[2]), (hole[1], hole[3])
         us = _axis_coords(lo[i], hi[i], step, ex_i)
         vs = _axis_coords(lo[j], hi[j], step, ex_j)
         face = Prim()
         off = (rnd.random(), rnd.random())
+        mesh.face_uv[key] = off
         for v in vs:
             for u in us:
                 q = [0.0, 0.0, 0.0]
@@ -176,6 +187,11 @@ def split_block(size, kinds, step, amp, seed, mat_split, mat_sawn, cavity=None,
                     cj = cav[j] if j < 2 else 0
                     if abs(cu) < ci / 2 and abs(cv) < cj / 2:
                         continue
+                if hole:
+                    cu = (us[iu] + us[iu + 1]) / 2
+                    cv = (vs[jv] + vs[jv + 1]) / 2
+                    if hole[0] < cu < hole[2] and hole[1] < cv < hole[3]:
+                        continue
                 A = jv * nu + iu
                 B, C, D = A + 1, A + nu + 1, A + nu
                 # alternate the diagonal so the facets don't all lean one way
@@ -187,7 +203,8 @@ def split_block(size, kinds, step, amp, seed, mat_split, mat_sawn, cavity=None,
                     t1, t2 = t1[::-1], t2[::-1]
                 face.tri(*t1); face.tri(*t2)
         face.smooth_normals()
-        mesh.prim(mat_split if kinds.get(key, "sawn") == "rough" else mat_sawn).extend(face)
+        mat = mat_split if kinds.get(key, "sawn") == "rough" else mat_sawn
+        mesh.prim(face_mats.get(key, mat)).extend(face)
 
     if cavity:
         cx, cy, depth = cavity
@@ -212,6 +229,7 @@ def split_block(size, kinds, step, amp, seed, mat_split, mat_sawn, cavity=None,
         flat_poly(prim, [(-cx / 2, -cy / 2, bot), (cx / 2, -cy / 2, bot),
                          (cx / 2, cy / 2, bot), (-cx / 2, cy / 2, bot)], (0.0, 0.0, 1.0),
                   lambda p: (p[0] * uv_scale, p[1] * uv_scale))
+    mesh.edge_band = falloff
     return mesh
 
 
@@ -233,32 +251,64 @@ def engraved_panel(mask, x0, y0, nx, ny, cell, depth, mat_top, mat_cut, uvf):
     up = (0.0, 0.0, 1.0)
     zf = -depth
 
-    def run(i0, i1, j, val):
+    open_runs = {}   # (i0, i1, val) -> first row; identical spans merge downward
+
+    def rect(prim, xa, ya, xb, yb, z):
+        flat_poly(prim, [(xa, ya, z), (xb, ya, z), (xb, yb, z), (xa, yb, z)], up, uvf)
+
+    def quad(i0, i1, j0, j1, val):
         xa, xb = x0 + i0 * cell, x0 + i1 * cell
-        ya, yb = y0 + j * cell, y0 + (j + 1) * cell
-        z = zf if val else 0.0
-        flat_poly(cut if val else top, [(xa, ya, z), (xb, ya, z), (xb, yb, z), (xa, yb, z)], up, uvf)
+        ya, yb = y0 + j0 * cell, y0 + j1 * cell
+        if val in (0, 1):
+            rect(cut if val else top, xa, ya, xb, yb, zf if val else 0.0)
+            return
+        # straight edge strip: half cut, half top, one wall down the middle
+        if val in (3, 12):
+            ym = (ya + yb) / 2
+            lo_cut = val == 3
+            rect(cut if lo_cut else top, xa, ya, xb, ym, zf if lo_cut else 0.0)
+            rect(top if lo_cut else cut, xa, ym, xb, yb, 0.0 if lo_cut else zf)
+            n = (0.0, -1.0 if lo_cut else 1.0, 0.0)
+            flat_poly(cut, [(xa, ym, 0.0), (xb, ym, 0.0), (xb, ym, zf), (xa, ym, zf)], n, uvf)
+        else:
+            xm = (xa + xb) / 2
+            right_cut = val == 6
+            rect(top if right_cut else cut, xa, ya, xm, yb, 0.0 if right_cut else zf)
+            rect(cut if right_cut else top, xm, ya, xb, yb, zf if right_cut else 0.0)
+            n = (1.0 if right_cut else -1.0, 0.0, 0.0)
+            flat_poly(cut, [(xm, ya, 0.0), (xm, yb, 0.0), (xm, yb, zf), (xm, ya, zf)], n, uvf)
+
+    def end_row(j, runs):
+        for key in list(open_runs):
+            if key not in runs:
+                quad(key[0], key[1], open_runs.pop(key), j, key[2])
+        for key in runs:
+            open_runs.setdefault(key, j)
 
     for j in range(ny):
         r0, r1 = mask[j], mask[j + 1]
         if not any(r0) and not any(r1):
-            run(0, nx, j, 0)
+            end_row(j, {(0, nx, 0)})
             continue
+        runs = set()
         rs, rv = 0, None
         for i in range(nx):
             c = (r0[i], r0[i + 1], r1[i + 1], r1[i])
             code = c[0] | c[1] << 1 | c[2] << 2 | c[3] << 3
-            if code == 0 or code == 15:
-                val = 1 if code == 15 else 0
+            if code in (0, 15, 3, 12):
+                val = {0: 0, 15: 1}.get(code, code)
                 if rv is not None and rv != val:
-                    run(rs, i, j, rv)
+                    runs.add((rs, i, rv))
                     rv = None
                 if rv is None:
                     rs, rv = i, val
                 continue
             if rv is not None:
-                run(rs, i, j, rv)
+                runs.add((rs, i, rv))
                 rv = None
+            if code in (6, 9):            # vertical edge: merges down the column
+                runs.add((i, i + 1, code))
+                continue
             # mixed cell
             bx, by = x0 + i * cell, y0 + j * cell
             seq = []
@@ -293,7 +343,9 @@ def engraved_panel(mask, x0, y0, nx, ny, cell, depth, mat_top, mat_cut, uvf):
                 flat_poly(cut, [(pa[0], pa[1], 0.0), (pb[0], pb[1], 0.0),
                                 (pb[0], pb[1], zf), (pa[0], pa[1], zf)], n, uvf)
         if rv is not None:
-            run(rs, nx, j, rv)
+            runs.add((rs, nx, rv))
+        end_row(j, runs)
+    end_row(ny, set())
     return mesh
 
 
@@ -324,7 +376,7 @@ def soil_patch(w, d, step, amp, seed, material, uv_scale=1 / 120.0):
 
 
 def snake_leaf(prim, base, height, width, facing_deg, lean, twist_deg, curl, thickness,
-               rnd, n_len=30, n_wid=8):
+               rnd, n_len=40, n_wid=10):
     """One Sansevieria leaf: sword-shaped, channelled, slightly twisted, with thickness.
 
     UVs run u across the leaf (0..1, margins at the ends) and v from base (0)
@@ -392,7 +444,7 @@ def snake_leaf(prim, base, height, width, facing_deg, lean, twist_deg, curl, thi
         prim.extend(part)
 
 
-def snake_plant(seed, n_leaves, h_range, w_range, spread, material):
+def snake_plant(seed, n_leaves, h_range, w_range, spread, material, pups=0):
     """A pot's worth of snake plant: leaves in two or three clumps."""
     rnd = random.Random(seed)
     mesh = Mesh("snake_plant")
@@ -419,8 +471,274 @@ def snake_plant(seed, n_leaves, h_range, w_range, spread, material):
         out_ang = math.degrees(math.atan2(base[1], base[0])) if (base[0] or base[1]) else ang
         facing = out_ang + rnd.uniform(-70, 70)
         leaves.append((base, h + 15.0, w, facing, lean))
+    # pups: short young shoots coming up near the rim
+    for k in range(pups):
+        ang = rnd.uniform(0, 2 * math.pi)
+        r = spread * rnd.uniform(0.9, 1.25)
+        base = (r * math.cos(ang), r * math.sin(ang), -12.0)
+        h = rnd.uniform(*h_range) * rnd.uniform(0.18, 0.32)
+        w = rnd.uniform(*w_range) * rnd.uniform(0.45, 0.65)
+        leaves.append((base, h + 12.0, w, math.degrees(ang) + rnd.uniform(-60, 60),
+                       rnd.uniform(0.05, 0.2)))
     for base, h, w, facing, lean in leaves:
         snake_leaf(prim, base, h, w, facing, lean,
                    twist_deg=rnd.uniform(-35, 35), curl=rnd.uniform(0.08, 0.18),
                    thickness=max(2.5, w * 0.08), rnd=rnd)
+    return mesh
+
+
+# --------------------------------------------------------------------------
+# Round pieces: revolved profiles with rough displacement
+# --------------------------------------------------------------------------
+
+
+def revolve(segments, n_theta, disp=None, clamp=None, uv_scale=1 / 200.0, uv_off=(0.0, 0.0),
+            name="revolve"):
+    """Spin profile segments around the z axis.
+
+    segments: list of (material, mapping, rows) where rows are (r, z, w),
+    mapping is 'side' (wrap around) or 'top' (planar from above). Order the
+    profile bottom-centre -> outward -> up -> inward so normals face out.
+    disp(theta, r, z) gives a radial offset in mm, scaled by each row's w.
+    clamp=(theta0_deg, D) slices a flat sawn facet: nothing pokes past the
+    plane D mm from the axis, facing direction theta0.
+
+    Returns the mesh; mesh.ring(r, z, w) gives the n_theta matching points of
+    any row so other surfaces can join it without cracks.
+    """
+    n = n_theta
+    th = [2 * math.pi * b / n for b in range(n + 1)]
+    cs = [(math.cos(t), math.sin(t)) for t in th]
+    t0, D = (math.radians(clamp[0]), clamp[1]) if clamp else (0.0, None)
+
+    def pos(b, r, z, w):
+        b %= n
+        c, s = cs[b]
+        rr = r + (w * disp(th[b], r, z) if (disp and w) else 0.0)
+        if D is not None:
+            k = math.cos(th[b] - t0)
+            if k > 1e-6 and rr * k > D:
+                rr = D / k
+        return (rr * c, rr * s, z)
+
+    mesh = Mesh(name)
+    for mat, mapping, rows in segments:
+        seg = Prim()
+        for r, z, w in rows:
+            for b in range(n + 1):
+                p = pos(b, r, z, w)
+                if mapping == "side":
+                    uv = (th[b] * max(r, 1.0) * uv_scale + uv_off[0], z * uv_scale + uv_off[1])
+                else:
+                    uv = (p[0] * uv_scale + uv_off[0], p[1] * uv_scale + uv_off[1])
+                seg.vert(p, (0.0, 0.0, 1.0), uv)
+        W = n + 1
+        P = seg.pos
+        for a in range(len(rows) - 1):
+            for b in range(n):
+                A = a * W + b
+                B, C, Dd = A + 1, A + W + 1, A + W
+                for tri in ((A, B, C), (A, C, Dd)):
+                    e = cross(sub(P[tri[1]], P[tri[0]]), sub(P[tri[2]], P[tri[0]]))
+                    if dot(e, e) > 1e-14:
+                        seg.tri(*tri)
+        seg.smooth_normals()
+        for a, (r, z, w) in enumerate(rows):
+            row = range(a * W, a * W + W)
+            if r == 0:
+                avg = normalize(tuple(sum(seg.nrm[i][k] for i in row) for k in range(3)))
+                for i in row:
+                    seg.nrm[i] = avg
+            else:
+                i0, i1 = a * W, a * W + n
+                avg = normalize(add(seg.nrm[i0], seg.nrm[i1]))
+                seg.nrm[i0] = seg.nrm[i1] = avg
+        mesh.prim(mat).extend(seg)
+    mesh.ring = lambda r, z, w: [pos(b, r, z, w) for b in range(n)]
+    return mesh
+
+
+def annulus_to_rect(prim, ring, rect, z, n, uvf):
+    """Flat surface between a closed ring (sorted by angle from 0) and a
+    rectangle around the origin that an engraved panel will fill."""
+    x0, y0, x1, y1 = rect
+
+    def ray(c, s):
+        tx = (x1 / c if c > 0 else x0 / c) if abs(c) > 1e-12 else float("inf")
+        ty = (y1 / s if s > 0 else y0 / s) if abs(s) > 1e-12 else float("inf")
+        t = min(tx, ty)
+        return (c * t, s * t)
+
+    norm_ang = lambda a: a % (2 * math.pi)
+    outer = [(norm_ang(math.atan2(p[1], p[0])), (p[0], p[1])) for p in ring]
+    inner = [(norm_ang(a), ray(math.cos(a), math.sin(a))) for a, _ in outer]
+    inner += [(norm_ang(math.atan2(y, x)), (x, y)) for x, y in ((x1, y1), (x0, y1), (x0, y0), (x1, y0))]
+    outer.sort(key=lambda e: e[0])
+    inner.sort(key=lambda e: e[0])
+    O = outer + [(outer[0][0] + 2 * math.pi, outer[0][1])]
+    I = inner + [(inner[0][0] + 2 * math.pi, inner[0][1])]
+    # start both loops near angle 0
+    i = j = 0
+    P = lambda q: (q[0], q[1], z)
+    while i < len(O) - 1 or j < len(I) - 1:
+        if j >= len(I) - 1 or (i < len(O) - 1 and O[i + 1][0] <= I[j + 1][0]):
+            tri = [P(O[i][1]), P(O[i + 1][1]), P(I[j][1])]
+            i += 1
+        else:
+            tri = [P(O[i][1]), P(I[j + 1][1]), P(I[j][1])]
+            j += 1
+        e = cross(sub(tri[1], tri[0]), sub(tri[2], tri[0]))
+        if dot(e, e) > 1e-14:
+            flat_poly(prim, tri, n, uvf)
+
+
+def _rock_field(per, amp, R, H, z_pull=True):
+    """Radial rough-split displacement for round stone, in mm."""
+    def fn(t, r, z):
+        x, y = math.cos(t) * R, math.sin(t) * R
+        zn = 2 * z / H - 1 if H else 0.0
+        bulge = 1 - zn ** 4
+        broad = per.fbm(x / 75.0, y / 75.0, z / 75.0, 4, gain=0.55)
+        ridge = 1 - abs(per.noise(x / 36.0 + 5.3, y / 36.0 + 1.7, z / 36.0 + 9.1))
+        grain = per.fbm(x / 7.0, y / 7.0, z / 7.0 + 40.0, 2)
+        chip = smoothstep(0.8, 1.0, abs(zn)) if z_pull else 0.0
+        return amp * (0.15 + 0.35 * bulge + broad + 0.3 * (ridge ** 2 - 0.4)
+                      + 0.06 * grain - 0.55 * chip)
+    return fn
+
+
+def round_coaster(R, thick, z0, amp, seed, mat_top, mat_edge, uv_off=(0.0, 0.0)):
+    """Honed round coaster with a hand-chipped, slightly rough rim."""
+    per = Perlin(seed)
+
+    def disp(t, r, z):
+        x, y = math.cos(t) * R, math.sin(t) * R
+        return amp * (0.7 * per.fbm(x / 9.0, y / 9.0, z / 9.0, 3)
+                      + 0.35 * per.noise(x / 2.6, y / 2.6, z / 2.6) - 0.3)
+
+    zt = z0 + thick
+    wall = [(R, z0 + 1.0 + (thick - 2.4) * k / 8, 1.0) for k in range(9)]
+    segs = [
+        (mat_top, "top", [(0.0, z0, 0.0), (R * 0.5, z0, 0.0), (R - 1.2, z0, 0.0)]),
+        (mat_edge, "side", [(R - 1.2, z0, 0.0), (R - 0.35, z0 + 0.3, 0.6)] + wall +
+         [(R - 0.35, zt - 0.35, 0.85), (R - 1.3, zt, 0.5)]),
+        (mat_top, "top", [(R - 1.3, zt, 0.5), (R - 2.6, zt, 0.2), (R - 5.0, zt, 0.0),
+                          (R * 0.7, zt, 0.0), (R * 0.4, zt, 0.0), (0.0, zt, 0.0)]),
+    ]
+    return revolve(segs, 400, disp, uv_scale=1 / 180.0, uv_off=uv_off, name="coaster")
+
+
+def disc(R, h, material, n=48, chamfer=0.0, uv_scale=1 / 130.0, top=True, bottom=True):
+    """Plain cylinder (cork pad, felt pad). Base at z = 0."""
+    segs = []
+    if bottom:
+        segs.append((material, "top", [(0.0, 0.0, 0.0), (R - chamfer, 0.0, 0.0)]))
+    side = [(R - chamfer, 0.0, 0.0), (R, chamfer, 0.0), (R, h - chamfer, 0.0), (R - chamfer, h, 0.0)]
+    if not chamfer:
+        side = [(R, 0.0, 0.0), (R, h, 0.0)]
+    segs.append((material, "side", side))
+    if top:
+        segs.append((material, "top", [(R - chamfer, h, 0.0), (0.0, h, 0.0)]))
+    return revolve(segs, n, uv_scale=uv_scale, name="disc")
+
+
+def round_planter(R, H, wall, depth, amp, seed, step, facet, mat_split, mat_sawn,
+                  bottom_rect, name="planter"):
+    """Round rough-split planter: split sides, one flat sawn facet, sawn rim,
+    drilled pocket, sawn base with an open rectangle for the QR/stamp panel."""
+    per = Perlin(seed)
+    disp = _rock_field(per, amp, R, H)
+    L = max(3 * amp, 8.0)
+    r_in = R - wall
+    n_theta = max(64, math.ceil(2 * math.pi * R / step))
+    nz = max(4, math.ceil(H / step))
+    walls = [(R, H * a / nz, 1.0) for a in range(nz + 1)]
+    nr = max(3, math.ceil((wall - 2.0) / step))
+    rim = []
+    for a in range(nr + 1):
+        r = R - (wall - 2.0) * a / nr
+        rim.append((r, H, 1.0 - smoothstep(0.0, L, R - r)))
+    rim += [(r_in + 0.6, H - 0.4, 0.0), (r_in, H - 2.0, 0.0)]
+    nd = max(2, math.ceil(depth / 25.0))
+    inner = [(r_in, H - 2.0 - (depth - 2.0) * a / nd, 0.0) for a in range(nd + 1)]
+    floor = [(r_in, H - depth, 0.0), (r_in * 0.5, H - depth, 0.0), (0.0, H - depth, 0.0)]
+    segs = [(mat_split, "side", walls), (mat_sawn, "top", rim),
+            (mat_sawn, "side", inner), (mat_sawn, "top", floor)]
+    mesh = revolve(segs, n_theta, disp, clamp=facet, uv_scale=1 / 200.0, name=name)
+    ring = mesh.ring(R, 0.0, 1.0)
+    annulus_to_rect(mesh.prim(mat_sawn), ring, bottom_rect, 0.0, (0.0, 0.0, -1.0),
+                    lambda p: (p[0] / 200.0, p[1] / 200.0))
+    mesh.edge_band = L
+    return mesh
+
+
+def soil_disc(R, step, amp, seed, material, uv_scale=1 / 120.0):
+    """Lumpy round soil surface centred on the origin at z ~ 0."""
+    per = Perlin(seed + 101)
+    n = max(24, math.ceil(2 * math.pi * R / step))
+    nr = max(2, math.ceil(R / step))
+    mesh = Mesh("soil")
+    prim = mesh.prim(material)
+    W = n + 1
+    for a in range(nr + 1):
+        r = R * a / nr
+        for b in range(W):
+            t = 2 * math.pi * (b % n) / n
+            x, y = r * math.cos(t), r * math.sin(t)
+            z = amp * (per.fbm(x / 30.0, y / 30.0, 0.5, 3) + 0.35 * per.noise(x / 4.0, y / 4.0, 3.3))
+            if a == 0:
+                z = amp * (per.fbm(0.0, 0.0, 0.5, 3) + 0.35 * per.noise(0.0, 0.0, 3.3))
+            prim.vert((x, y, z), (0.0, 0.0, 1.0), (x * uv_scale, y * uv_scale))
+    for a in range(nr):
+        for b in range(n):
+            A = a * W + b
+            if a > 0:
+                prim.tri(A, A + 1, A + W + 1)
+            prim.tri(A, A + W + 1, A + W)
+    prim.smooth_normals()
+    return mesh
+
+
+def pebbles(count, R, seed, material, size=(4.0, 9.0), avoid=()):
+    """Top-dressing of small squashed stones scattered inside radius R."""
+    rnd = random.Random(seed)
+    mesh = Mesh("pebbles")
+    prim = mesh.prim(material)
+    placed = 0
+    tries = 0
+    while placed < count and tries < count * 40:
+        tries += 1
+        a = rnd.uniform(*size)
+        r = math.sqrt(rnd.random()) * (R - a)
+        t = rnd.uniform(0, 2 * math.pi)
+        cx, cy = r * math.cos(t), r * math.sin(t)
+        if any(math.hypot(cx - ax, cy - ay) < ar + a * 0.5 for ax, ay, ar in avoid):
+            continue
+        b, c = a * rnd.uniform(0.6, 0.9), a * rnd.uniform(0.35, 0.55)
+        rot = rnd.uniform(0, math.pi)
+        cr, sr = math.cos(rot), math.sin(rot)
+        lumps = [rnd.uniform(0.9, 1.1) for _ in range(5)]
+        sp = Prim()
+        nu, nv = 10, 6
+        for j in range(nv + 1):
+            ph = math.pi * j / nv - math.pi / 2
+            for i in range(nu + 1):
+                th = 2 * math.pi * (i % nu) / nu
+                k = 1 + 0.08 * math.sin(3 * th + lumps[0] * 4) * math.cos(ph) * lumps[1]
+                x = a / 2 * math.cos(ph) * math.cos(th) * k
+                y = b / 2 * math.cos(ph) * math.sin(th) * k
+                z = c / 2 * math.sin(ph)
+                p = (cx + x * cr - y * sr, cy + x * sr + y * cr, z + c * 0.15)
+                sp.vert(p, (0.0, 0.0, 1.0), ((cx + x) / 40.0 + placed * 0.37, (cy + y) / 40.0))
+        W = nu + 1
+        for j in range(nv):
+            for i in range(nu):
+                A = j * W + i
+                for tri in ((A, A + 1, A + W + 1), (A, A + W + 1, A + W)):
+                    e = cross(sub(sp.pos[tri[1]], sp.pos[tri[0]]), sub(sp.pos[tri[2]], sp.pos[tri[0]]))
+                    if dot(e, e) > 1e-12:
+                        sp.tri(*tri)
+        sp.smooth_normals()
+        prim.extend(sp)
+        placed += 1
     return mesh
